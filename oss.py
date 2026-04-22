@@ -275,3 +275,129 @@ comparaciones["INSIGHT"] = comparaciones.apply(insight, axis=1)
 
 st.markdown("### 📊 Variación e impacto")
 st.dataframe(comparaciones.style.map(color, subset=["Δ VENTAS","Δ COSTO PROM"]))
+
+# =========================
+# NUEVA HOJA - ANALISIS FINANCIERO
+# =========================
+
+st.sidebar.markdown("---")
+pagina = st.sidebar.radio("Vista", ["Dashboard", "Análisis Financiero"])
+
+if pagina == "Análisis Financiero":
+
+    st.title("💰 Análisis Financiero")
+
+    # =========================
+    # FILTRO PLANES
+    # =========================
+    plan_filter = st.sidebar.multiselect(
+        "Filtrar Plan",
+        sorted(df["TARIFFPLANNAME"].dropna().unique())
+    )
+
+    df_fin = df_f.copy()
+
+    if plan_filter:
+        df_fin = df_fin[df_fin["TARIFFPLANNAME"].isin(plan_filter)]
+
+    # =========================
+    # FUNCION BASE
+    # =========================
+    def construir_tabla(df, index_col):
+
+        # Cantidad
+        qty = pd.pivot_table(
+            df,
+            values="TXNID",
+            index=index_col,
+            columns="DIA",
+            aggfunc="count",
+            fill_value=0
+        )
+
+        # Costo
+        cost = pd.pivot_table(
+            df,
+            values="MONTO",
+            index=index_col,
+            columns="DIA",
+            aggfunc="sum",
+            fill_value=0
+        )
+
+        orden = [4,5,6,11,12,13]
+
+        qty = qty.reindex(columns=orden, fill_value=0)
+        cost = cost.reindex(columns=orden, fill_value=0)
+
+        # Renombrar columnas
+        qty.columns = [str(c) for c in qty.columns]
+        cost.columns = [f"S/{c}" for c in cost.columns]
+
+        tabla = pd.concat([qty, cost], axis=1)
+
+        # =========================
+        # VARIACIONES CANTIDAD
+        # =========================
+        tabla["Δ 4-11"] = tabla["11"] - tabla["4"]
+        tabla["Δ 5-12"] = tabla["12"] - tabla["5"]
+        tabla["Δ 6-13"] = tabla["13"] - tabla["6"]
+        tabla["Δ TOTAL"] = tabla["Δ 4-11"] + tabla["Δ 5-12"] + tabla["Δ 6-13"]
+
+        # =========================
+        # VARIACIONES COSTO
+        # =========================
+        tabla["Δ S/ 4-11"] = tabla["S/11"] - tabla["S/4"]
+        tabla["Δ S/ 5-12"] = tabla["S/12"] - tabla["S/5"]
+        tabla["Δ S/ 6-13"] = tabla["S/13"] - tabla["S/6"]
+        tabla["Δ S/ TOTAL"] = tabla["Δ S/ 4-11"] + tabla["Δ S/ 5-12"] + tabla["Δ S/ 6-13"]
+
+        # =========================
+        # MARGINAL
+        # =========================
+        tabla["MARGINAL"] = tabla["Δ S/ TOTAL"] / tabla["Δ TOTAL"].replace(0, 1)
+
+        return tabla
+
+    # =========================
+    # COLOR
+    # =========================
+    def color(val):
+        if val > 0:
+            return "color: #00ff99"
+        elif val < 0:
+            return "color: #ff4d4d"
+        return ""
+
+    # =========================
+    # TABLA PLANES
+    # =========================
+    st.subheader("📊 Planes")
+
+    tabla_planes = construir_tabla(df_fin, "TARIFFPLANNAME")
+
+    st.dataframe(
+        tabla_planes.style.map(color, subset=["Δ TOTAL", "Δ S/ TOTAL"])
+    )
+
+    # =========================
+    # TABLA DEPARTAMENTO
+    # =========================
+    st.subheader("🏢 Departamento")
+
+    tabla_dep = construir_tabla(df_fin, "DEPARTMENT")
+
+    st.dataframe(
+        tabla_dep.style.map(color, subset=["Δ TOTAL", "Δ S/ TOTAL"])
+    )
+
+    # =========================
+    # TABLA NIVELES
+    # =========================
+    st.subheader("📊 Niveles")
+
+    tabla_niv = construir_tabla(df_fin, "NIVELES")
+
+    st.dataframe(
+        tabla_niv.style.map(color, subset=["Δ TOTAL", "Δ S/ TOTAL"])
+    )
